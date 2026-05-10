@@ -53,11 +53,11 @@ Segments, in order:
 One row per running subagent in the agent panel:
 
 ```
-[glyph] code-explorer | Tracing auth flow across services | 24k tokens | 2m 14s
-[glyph] code-reviewer | Reviewing PR diff for security    | 8k tokens  | 31s
+code-explorer | Tracing auth flow across services | 24k tokens | 2m 14s
+code-reviewer | Reviewing PR diff for security    | 8k tokens  | 31s
 ```
 
-The glyph reflects status: filled circle (running), check (completed), cross (failed), open circle (other). The description is truncated to fit your terminal width and the cost columns stay aligned.
+Claude Code prepends its own status indicator before each row, so the script no longer renders one. The description is truncated to fit your terminal width and the cost columns stay aligned.
 
 ---
 
