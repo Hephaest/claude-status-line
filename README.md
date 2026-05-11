@@ -104,8 +104,7 @@ The keys you need to add:
 {
   "statusLine": {
     "type": "command",
-    "command": "~/.claude/statusline.sh",
-    "padding": 2
+    "command": "~/.claude/statusline.sh"
   },
   "subagentStatusLine": {
     "type": "command",

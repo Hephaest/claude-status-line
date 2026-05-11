@@ -4,8 +4,10 @@
 # Implements the official statusLine contract:
 #   https://code.claude.com/docs/en/statusline
 #
-# Output (single line):
-#   🌿 branch | effort | ▓░ bar PCT% | 5h: NN% 7d: NN% | BAT: NN% CPU NN% RAM NN% | 💰 $X.XX | ⏱️  Nm Ss
+# Output (one or two lines, depending on terminal width vs WRAP_AT):
+#   🌿 branch | effort | ▓░ bar PCT% | 5h: NN% 7d: NN% | BAT: NN% CPU NN% RAM NN% | 💰 $X.XX | ⏱️ Xh Ym
+# When the combined visible width exceeds WRAP_AT, the second half (BAT/CPU/RAM | $ | duration)
+# is emitted on its own row.
 #
 # Requires: bash 4+, jq, git, macOS (top, vm_stat, pmset, sysctl).
 #
@@ -21,6 +23,7 @@
 #   https://code.claude.com/docs/en/statusline#cache-expensive-operations
 
 set -o pipefail
+shopt -s extglob   # for *(…) inside visible_width's ANSI-strip pattern
 
 # --- Constants ---
 BRANCH_GLYPH='🌿'
@@ -29,6 +32,7 @@ DURATION_GLYPH='⏱️'
 BAR_WIDTH=10
 CACHE_FILE="$HOME/.claude/.statusline-cache"
 CACHE_MAX_AGE=5   # seconds
+WRAP_AT=80        # split the status line into two rows once visible width exceeds this
 
 DIM=$'\033[38;5;245m'
 YEL=$'\033[33m'
@@ -58,6 +62,24 @@ battery_color() {
   elif (( v < 30 )); then printf '%s' "$YEL"
   else                    printf '%s' "$DIM"
   fi
+}
+
+format_duration() {
+  local s="$1"
+  (( s < 0 )) && s=0
+  if   (( s < 60 ));   then printf '%ds'      "$s"
+  elif (( s < 3600 )); then printf '%dm %ds'  "$((s/60))"   "$((s%60))"
+  else                       printf '%dh %dm' "$((s/3600))" "$(((s%3600)/60))"
+  fi
+}
+
+visible_width() {
+  # Strip CSI escape sequences, then count code points with `wc -m`. *([0-9;])
+  # requires extglob: plain bash globs would treat [0-9;]* as "one digit/; then
+  # any chars" — so * would greedily eat everything between the first ESC and
+  # the last `m`, returning 0. *(…) bounds the match to the bracket class.
+  local stripped="${1//$'\033'\[*([0-9;])m/}"
+  printf '%s' "$stripped" | wc -m | tr -d ' '
 }
 
 # --- System samplers ---
@@ -181,8 +203,6 @@ fi
 
 cost_fmt=$(printf '%.2f' "$COST")
 duration_sec=$(( DURATION_MS / 1000 ))
-mins=$(( duration_sec / 60 ))
-secs=$(( duration_sec % 60 ))
 
 # --- Rate-limit segment (omit if both fields absent) ---
 
@@ -204,16 +224,25 @@ sys_segment=""
 [[ "$BAT_STATE" != "none" ]] && sys_segment="${bat_color}BAT: ${BAT}%${RST} "
 sys_segment="${sys_segment}${cpu_color}CPU ${CPU}%${RST} ${ram_color}RAM ${RAM}%${RST}"
 
-# --- Assemble single line ---
+# --- Assemble: two halves, joined as one row when narrow, two rows when wide ---
+# Half 1: identity + load (branch, effort, context, rate limits).
+# Half 2: resources + spend (system stats, cost, duration).
 
 SEP="${DIM} | ${RST}"
-line=""
-[[ -n "$BRANCH" ]]                  && line="${DIM}${BRANCH_GLYPH} ${BRANCH}${RST}"
-[[ "$THN" == "true" && -n "$EFF" ]] && line="${line:+${line}${SEP}}${DIM}${EFF}${RST}"
-line="${line:+${line}${SEP}}${ctx_bar_color}${ctx_bar}${RST} ${DIM}${CTX_USED}%${RST}"
-[[ -n "$rate_segment" ]]            && line="${line}${SEP}${rate_segment}"
-line="${line}${SEP}${sys_segment}"
-line="${line}${SEP}${DIM}${COST_GLYPH} \$${cost_fmt}${RST}"
-line="${line}${SEP}${DIM}${DURATION_GLYPH} ${mins}m ${secs}s${RST}"
 
-printf '%s\n' "$line"
+line1=""
+[[ -n "$BRANCH" ]]                  && line1="${DIM}${BRANCH_GLYPH} ${BRANCH}${RST}"
+[[ "$THN" == "true" && -n "$EFF" ]] && line1="${line1:+${line1}${SEP}}${DIM}${EFF}${RST}"
+line1="${line1:+${line1}${SEP}}${ctx_bar_color}${ctx_bar}${RST} ${DIM}${CTX_USED}%${RST}"
+[[ -n "$rate_segment" ]]            && line1="${line1}${SEP}${rate_segment}"
+
+line2="${sys_segment}"
+line2="${line2}${SEP}${DIM}${COST_GLYPH} \$${cost_fmt}${RST}"
+line2="${line2}${SEP}${DIM}${DURATION_GLYPH} $(format_duration "$duration_sec")${RST}"
+
+combined="${line1}${SEP}${line2}"
+if (( $(visible_width "$combined") > WRAP_AT )); then
+  printf '%s\n%s\n' "$line1" "$line2"
+else
+  printf '%s\n' "$combined"
+fi
