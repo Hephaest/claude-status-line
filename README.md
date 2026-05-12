@@ -33,7 +33,7 @@ Claude Code's default status line answers some of these. This one answers all of
 A single line, color-coded by severity, refreshed every render:
 
 ```
-[branch] main | high | ▓▓▓▓░░░░░░ 38% | 5h: 22% 7d: 14% | BAT: 84% CPU 12% RAM 41% | $ 0.27 | 1m 42s
+[branch] main | Opus 4.7 (1M) | high | ▓▓▓▓░░░░░░ 38% | 5h: 22% 7d: 14% | BAT: 84% CPU 12% RAM 41% | $ 0.27 | 1m 42s
 ```
 
 Segments, in order:
@@ -41,6 +41,7 @@ Segments, in order:
 | Segment      | Source                          | Notes                                                    |
 | ------------ | ------------------------------- | -------------------------------------------------------- |
 | Branch       | `git -C $cwd branch --show-current` | Omitted when not in a git repo                       |
+| Model        | `.model.display_name`             | Friendly label shipped by Claude Code, e.g. `Opus 4.7 (1M context)`; we trim ` context)` → `)` for density, so it renders as `Opus 4.7 (1M)` |
 | Effort       | `.effort.level` (only when thinking is enabled) | low / medium / high                      |
 | Context bar  | `.context_window.used_percentage` | 10-char block: green < 70%, yellow >= 70%, red >= 90%  |
 | Rate limits  | `.rate_limits.{five_hour,seven_day}.used_percentage` | Hidden when both are absent       |

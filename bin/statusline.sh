@@ -5,13 +5,14 @@
 #   https://code.claude.com/docs/en/statusline
 #
 # Output (one or two lines, depending on terminal width vs WRAP_AT):
-#   🌿 branch | effort | ▓░ bar PCT% | 5h: NN% 7d: NN% | BAT: NN% CPU NN% RAM NN% | 💰 $X.XX | ⏱️ Xh Ym
+#   🌿 branch | model | effort | ▓░ bar PCT% | 5h: NN% 7d: NN% | BAT: NN% CPU NN% RAM NN% | 💰 $X.XX | ⏱️ Xh Ym
 # When the combined visible width exceeds WRAP_AT, the second half (BAT/CPU/RAM | $ | duration)
 # is emitted on its own row.
 #
 # Requires: bash 4+, jq, git, macOS (top, vm_stat, pmset, sysctl).
 #
 # JSON contract on stdin (full schema at the URL above):
+#   .model.display_name
 #   .thinking.enabled, .effort.level
 #   .context_window.used_percentage
 #   .rate_limits.{five_hour,seven_day}.used_percentage
@@ -157,6 +158,7 @@ fi
 
 input=$(cat)
 {
+  read -r MODEL_NAME
   read -r THN
   read -r EFF
   read -r CTX_USED
@@ -167,6 +169,7 @@ input=$(cat)
   read -r CWD
 } <<<"$(
   jq -r '
+    .model.display_name                     // "",
     .thinking.enabled                       // false,
     .effort.level                           // "",
     (.context_window.used_percentage        // 0 | floor),
@@ -177,6 +180,10 @@ input=$(cat)
     .workspace.current_dir                  // "."
   ' <<<"$input"
 )"
+
+# display_name ships the full friendly label (e.g. "Opus 4.7 (1M context)").
+# Tighten "(1M context)" → "(1M)" so the segment stays compact.
+MODEL_LABEL="${MODEL_NAME// context)/)}"
 
 # --- Branch (live, uncached: ~10 ms) ---
 
@@ -232,6 +239,7 @@ SEP="${DIM} | ${RST}"
 
 line1=""
 [[ -n "$BRANCH" ]]                  && line1="${DIM}${BRANCH_GLYPH} ${BRANCH}${RST}"
+[[ -n "$MODEL_LABEL" ]]             && line1="${line1:+${line1}${SEP}}${DIM}${MODEL_LABEL}${RST}"
 [[ "$THN" == "true" && -n "$EFF" ]] && line1="${line1:+${line1}${SEP}}${DIM}${EFF}${RST}"
 line1="${line1:+${line1}${SEP}}${ctx_bar_color}${ctx_bar}${RST} ${DIM}${CTX_USED}%${RST}"
 [[ -n "$rate_segment" ]]            && line1="${line1}${SEP}${rate_segment}"
