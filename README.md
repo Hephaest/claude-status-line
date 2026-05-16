@@ -121,7 +121,7 @@ Restart Claude Code. The new status line should appear at the bottom of the wind
 ## Features
 
 - Single-line, color-coded output with green / yellow / red thresholds
-- Five-second cache for system samples (`top` / `vm_stat` / `pmset`) so the bar stays cheap to render
+- Five-second cache for system samples (`top` / `vm_stat` / `pmset`) so the bar stays cheap to render (server mode only)
 - Resilient JSON parsing — missing fields default sensibly, no crashes
 - Subagent description truncates to fit the terminal's reported `.columns`
 - Rate-limit segment auto-hides when Claude Code does not provide the fields
@@ -132,6 +132,34 @@ Restart Claude Code. The new status line should appear at the bottom of the wind
 ---
 
 ## Customization
+
+### Modes
+
+`statusline.sh` accepts an optional positional argument selecting the layout:
+
+- **`desktop`** — single line, no BAT/CPU/RAM. macOS already shows those in the menu bar, so the segment is dropped. The `top` / `vm_stat` / `pmset` sampling is skipped entirely, saving ~50–100 ms per render.
+- **`server`** *(default)* — full layout with BAT/CPU/RAM, wraps onto a second row when the visible width exceeds `WRAP_AT` (80 cells).
+
+Pass the mode in your `~/.claude/settings.json` `command` string:
+
+```json
+"statusLine": { "type": "command", "command": "~/.claude/statusline.sh desktop" }
+```
+
+Sample renders:
+
+```
+desktop (one line):
+🌿 main | Opus 4.7 (1M) | high | ▓▓▓░░░░░░░ 38% | 5h: 22% 7d: 14% | 💰 $0.27 | ⏱️ 1m 42s
+
+server (wraps when wide):
+🌿 main | Opus 4.7 (1M) | high | ▓▓▓░░░░░░░ 38% | 5h: 22% 7d: 14%
+BAT: 80% CPU 14% RAM 69% | 💰 $0.27 | ⏱️ 1m 42s
+```
+
+An unrecognized argument falls back to `server`, so a typo never produces a blank status line.
+
+### Constants
 
 All the constants you might want to tweak live at the top of each script.
 

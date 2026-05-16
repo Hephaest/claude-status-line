@@ -41,6 +41,12 @@ RED=$'\033[31m'
 GRN=$'\033[32m'
 RST=$'\033[0m'
 
+# --- Mode ---
+# desktop = single line, no BAT/CPU/RAM. Skips system sampling for speed.
+# server  = full layout with BAT/CPU/RAM, wraps when wide. (default)
+MODE="${1:-server}"
+[[ "$MODE" != "desktop" && "$MODE" != "server" ]] && MODE="server"
+
 # --- Colour helpers ---
 
 threshold_forward() {
@@ -189,10 +195,12 @@ MODEL_LABEL="${MODEL_NAME// context)/)}"
 
 BRANCH=$(git -C "$CWD" branch --show-current 2>/dev/null)
 
-# --- System stats (cached) ---
+# --- System stats (cached; server mode only) ---
 
-cache_is_stale && refresh_cache
-IFS='|' read -r CPU RAM BAT BAT_STATE < "$CACHE_FILE"
+if [[ "$MODE" == "server" ]]; then
+  cache_is_stale && refresh_cache
+  IFS='|' read -r CPU RAM BAT BAT_STATE < "$CACHE_FILE"
+fi
 
 # --- Context bar (10 chars, threshold-coloured fill) ---
 
@@ -222,14 +230,16 @@ if [[ -n "$RL7" ]]; then
 fi
 rate_segment="${rate_parts[*]}"   # space-joined; empty when no parts
 
-# --- System-stats segment (BAT optional; CPU & RAM always) ---
+# --- System-stats segment (BAT optional; CPU & RAM always; server mode only) ---
 
-bat_color=$(battery_color "$BAT" "$BAT_STATE")
-cpu_color=$(threshold_forward "$CPU" 70 90)
-ram_color=$(threshold_forward "$RAM" 75 90)
 sys_segment=""
-[[ "$BAT_STATE" != "none" ]] && sys_segment="${bat_color}BAT: ${BAT}%${RST} "
-sys_segment="${sys_segment}${cpu_color}CPU ${CPU}%${RST} ${ram_color}RAM ${RAM}%${RST}"
+if [[ "$MODE" == "server" ]]; then
+  bat_color=$(battery_color "$BAT" "$BAT_STATE")
+  cpu_color=$(threshold_forward "$CPU" 70 90)
+  ram_color=$(threshold_forward "$RAM" 75 90)
+  [[ "$BAT_STATE" != "none" ]] && sys_segment="${bat_color}BAT: ${BAT}%${RST} "
+  sys_segment="${sys_segment}${cpu_color}CPU ${CPU}%${RST} ${ram_color}RAM ${RAM}%${RST}"
+fi
 
 # --- Assemble: two halves, joined as one row when narrow, two rows when wide ---
 # Half 1: identity + load (branch, effort, context, rate limits).
@@ -244,13 +254,12 @@ line1=""
 line1="${line1:+${line1}${SEP}}${ctx_bar_color}${ctx_bar}${RST} ${DIM}${CTX_USED}%${RST}"
 [[ -n "$rate_segment" ]]            && line1="${line1}${SEP}${rate_segment}"
 
-line2="${sys_segment}"
-line2="${line2}${SEP}${DIM}${COST_GLYPH} \$${cost_fmt}${RST}"
+line2="${sys_segment:+${sys_segment}${SEP}}${DIM}${COST_GLYPH} \$${cost_fmt}${RST}"
 line2="${line2}${SEP}${DIM}${DURATION_GLYPH} $(format_duration "$duration_sec")${RST}"
 
 combined="${line1}${SEP}${line2}"
-if (( $(visible_width "$combined") > WRAP_AT )); then
-  printf '%s\n%s\n' "$line1" "$line2"
-else
+if [[ "$MODE" == "desktop" ]] || (( $(visible_width "$combined") <= WRAP_AT )); then
   printf '%s\n' "$combined"
+else
+  printf '%s\n%s\n' "$line1" "$line2"
 fi
